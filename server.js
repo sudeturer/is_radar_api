@@ -119,6 +119,7 @@ const Application = mongoose.model('applications', new mongoose.Schema({
   student_name: String,
   student_email: String,
   note: String,
+  status: { type: String, default: 'Beklemede' },
   created_at: { type: Date, default: Date.now }
 }));
 
@@ -281,6 +282,40 @@ app.get('/api/posts/mine', auth, async (req, res) => {
   }
 });
 
+// Firma kendi ilanını siler
+app.delete('/api/posts/:id', auth, async (req, res) => {
+  try {
+    if (!isId(req.params.id)) return res.status(400).json({ error: "Geçersiz ilan." });
+    const r = await InternshipPost.deleteOne({ _id: req.params.id, owner_id: req.userId });
+    if (!r.deletedCount) return res.status(404).json({ error: "İlan bulunamadı." });
+    res.json({ ok: true });
+  } catch (error) {
+    console.error("İlan silme hatası:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Firma başvuru durumunu günceller (Beklemede / Kabul Edildi / Reddedildi)
+app.patch('/api/applications/:id', auth, async (req, res) => {
+  try {
+    const { status } = req.body;
+    if (!isId(req.params.id)) return res.status(400).json({ error: "Geçersiz başvuru." });
+    if (!['Beklemede', 'Kabul Edildi', 'Reddedildi'].includes(status)) {
+      return res.status(400).json({ error: "Geçersiz durum." });
+    }
+    const app_ = await Application.findOneAndUpdate(
+      { _id: req.params.id, company_id: req.userId },
+      { status },
+      { new: true }
+    );
+    if (!app_) return res.status(404).json({ error: "Başvuru bulunamadı." });
+    res.json(app_);
+  } catch (error) {
+    console.error("Başvuru güncelleme hatası:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // ---- Başvurular ----
 app.post('/api/applications', auth, async (req, res) => {
   try {
@@ -339,9 +374,25 @@ app.get('/api/applications/received', auth, async (req, res) => {
 // Mesajlaşılabilecek kişi listesi (şifre gibi bilgiler DÖNMEZ)
 app.get('/api/directory', auth, async (req, res) => {
   try {
-    const roles = String(req.query.roles || '').split(',').filter(Boolean);
-    const users = await User.find({ role: { $in: roles } }).select('full_name role');
-    res.json(users);
+    let roles = String(req.query.roles || '').split(',').filter(Boolean);
+    if (roles.includes('student')) roles.push('intern');
+    const users = await User.find({ role: { $in: roles }, _id: { $ne: req.userId } })
+      .select('full_name role profile');
+    const out = users.map(u => {
+      const p = u.profile || {};
+      const parts = [];
+      if (u.role === 'coach') parts.push('Kariyer Koçu');
+      else if (u.role === 'graduate') {
+        parts.push('Mezun');
+        if (p.job_title) parts.push(p.job_title);
+        if (p.university) parts.push(p.university);
+      } else {
+        parts.push('Öğrenci');
+        if (p.department) parts.push(p.department);
+      }
+      return { _id: u._id, full_name: u.full_name, role: u.role, subtitle: parts.join(' · ') };
+    });
+    res.json(out);
   } catch (error) {
     console.error("Rehber hatası:", error);
     res.status(500).json({ error: error.message });
@@ -391,4 +442,3 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`>>> API servisi aktif: port ${PORT}`);
 });
-
