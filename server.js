@@ -358,6 +358,17 @@ app.post('/api/applications', auth, async (req, res) => {
   }
 });
 
+// Öğrencinin kendi başvuruları
+app.get('/api/applications/mine', auth, async (req, res) => {
+  try {
+    const list = await Application.find({ student_id: req.userId }).sort({ created_at: -1 });
+    res.json(list);
+  } catch (error) {
+    console.error("Başvurularım hatası:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Firmaya gelen başvurular
 app.get('/api/applications/received', auth, async (req, res) => {
   try {
