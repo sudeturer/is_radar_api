@@ -382,6 +382,20 @@ app.get('/api/applications/received', auth, async (req, res) => {
 
 // ---- Mesajlaşma ----
 
+// Herkese açık profil alanları (şifre vb. asla dönmez)
+function publicProfile(p) {
+  p = p || {};
+  return {
+    job_title: p.job_title || '',
+    company: p.company || '',
+    job_description: p.job_description || '',
+    university: p.university || '',
+    department: p.department || '',
+    birth_year: p.birth_year || '',
+    experiences: Array.isArray(p.experiences) ? p.experiences : []
+  };
+}
+
 // Mesajlaşılabilecek kişi listesi (şifre gibi bilgiler DÖNMEZ)
 app.get('/api/directory', auth, async (req, res) => {
   try {
@@ -401,11 +415,24 @@ app.get('/api/directory', auth, async (req, res) => {
         parts.push('Öğrenci');
         if (p.department) parts.push(p.department);
       }
-      return { _id: u._id, full_name: u.full_name, role: u.role, subtitle: parts.join(' · ') };
+      return { _id: u._id, full_name: u.full_name, role: u.role, subtitle: parts.join(' · '), profile: publicProfile(p) };
     });
     res.json(out);
   } catch (error) {
     console.error("Rehber hatası:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Giriş yapmış kullanıcı başka birinin herkese açık profilini okur
+app.get('/api/users/:id', auth, async (req, res) => {
+  try {
+    if (!isId(req.params.id)) return res.status(400).json({ error: "Geçersiz kullanıcı." });
+    const u = await User.findById(req.params.id).select('full_name role profile');
+    if (!u) return res.status(404).json({ error: "Kullanıcı bulunamadı." });
+    res.json({ _id: u._id, full_name: u.full_name, role: u.role, profile: publicProfile(u.profile) });
+  } catch (error) {
+    console.error("Kullanıcı profili hatası:", error);
     res.status(500).json({ error: error.message });
   }
 });
