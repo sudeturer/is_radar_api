@@ -475,6 +475,13 @@ app.post('/api/messages', auth, async (req, res) => {
   }
 });
 
+// Şifre yenileme (e-posta ile bağlantı gönderir). Giriş kodu şifreyi düz karşılaştırdığı
+// için hashPassword şifreyi olduğu gibi döndürür.
+require('./password_reset')(app, {
+  User,
+  hashPassword: async (plain) => plain
+});
+
 // Port Dinleme — Render kendi PORT değerini environment variable olarak verir
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
